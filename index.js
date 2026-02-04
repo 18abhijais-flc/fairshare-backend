@@ -41,25 +41,36 @@ const upload = multer({ dest: 'uploads/' });
 // --- ROUTES ---
 
 // A. OCR Scanning (Existing)
+// C. SCAN Receipt (Upgraded)
 app.post('/api/scan', upload.single('receipt'), async (req, res) => {
-    // ... (Keep your existing OCR logic here!) ...
-    // Note: I'm skipping pasting the whole OCR block to keep this readable.
-    // PASTE YOUR WORKING OCR LOGIC BACK HERE.
-    // If you need me to paste the full file again, let me know!
     try {
-        if (!req.file) return res.status(400).json({ error: "No file" });
-        const { data: { text } } = await Tesseract.recognize(req.file.path, 'eng');
-        const lines = text.split('\n');
-        let detectedTotal = 0;
-        // ... (Your smart regex logic) ...
-        // Quick fallback for demo:
-        const numbers = text.match(/\d+\.\d{2}/g);
-        if (numbers) detectedTotal = Math.max(...numbers.map(n => parseFloat(n)));
-        
-        fs.unlinkSync(req.file.path);
-        res.json({ success: true, total: detectedTotal });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
+        if (!req.file) return res.status(400).json({ error: "No image uploaded" });
+
+        const worker = await createWorker('eng');
+        const { data: { text } } = await worker.recognize(req.file.buffer);
+        await worker.terminate();
+
+        // 🔍 DEBUG: Print what the AI actually saw
+        console.log("--- OCR OUTPUT START ---");
+        console.log(text);
+        console.log("--- OCR OUTPUT END ---");
+
+        // 1. Improved Regex: Looks for Total, Amount, Due, or Balance
+        // It handles symbols like ₹, $, or spaces between "Total" and the number
+        const regex = /(?:total|amount|due|balance|pay)[\w\s:₹$]*([\d,]+\.?\d*)/i;
+        const match = text.match(regex);
+
+        let total = 0;
+        if (match && match[1]) {
+            // Remove commas and convert to number
+            total = parseFloat(match[1].replace(/,/g, ''));
+        }
+
+        res.json({ success: true, total: total, rawText: text });
+
+    } catch (error) {
+        console.error("Scan failed:", error);
+        res.status(500).json({ error: "Scan failed" });
     }
 });
 
