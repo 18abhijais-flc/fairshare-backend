@@ -7,6 +7,7 @@ const multer = require('multer');
 const Tesseract = require('tesseract.js');
 const fs = require('fs');
 const mongoose = require('mongoose');
+const { createWorker } = require('tesseract.js');
 
 const app = express();
 app.use(cors());
